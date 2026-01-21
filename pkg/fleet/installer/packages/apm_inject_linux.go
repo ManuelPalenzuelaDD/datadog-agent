@@ -11,6 +11,7 @@ import (
 	"github.com/DataDog/datadog-agent/pkg/fleet/installer/packages/apminject"
 	"github.com/DataDog/datadog-agent/pkg/fleet/installer/packages/packagemanager"
 	"github.com/DataDog/datadog-agent/pkg/fleet/installer/telemetry"
+	"github.com/DataDog/datadog-agent/pkg/util/log"
 )
 
 var (
@@ -45,19 +46,45 @@ func preInstallAPMInjector(ctx HookContext) (err error) {
 	return nil
 }
 
-// postInstallAPMInjector is called after the APM injector is installed
+// postInstallAPMInjector is called after the APM injector is installed.
+// When the OCI package ships the daemon-style ssi binary and a bundled systemd
+// service file, the service file is placed in /etc/systemd/system/ and the
+// service is enabled.  Older packages that do not ship ssi fall back to the
+// direct InjectorInstaller.Setup() path.
 func postInstallAPMInjector(ctx HookContext) (err error) {
 	span, ctx := ctx.StartSpan("setup_injector")
 	defer func() { span.Finish(err) }()
+
+	daemonStyle, err := apminject.HasDaemonStylePackage()
+	if err != nil {
+		return err
+	}
+	if daemonStyle {
+		log.Infof("APM inject: installing using daemon-style systemd service mode")
+		return apminject.NewSystemdServiceManager().Install(ctx)
+	}
+
+	log.Infof("APM inject: installing using legacy installer mode")
 	installer := apminject.NewInstaller()
 	defer func() { installer.Finish(err) }()
 	return installer.Setup(ctx)
 }
 
-// preRemoveAPMInjector is called before the APM injector is removed
+// preRemoveAPMInjector is called before the APM injector is removed.
 func preRemoveAPMInjector(ctx HookContext) (err error) {
 	span, ctx := ctx.StartSpan("remove_injector")
 	defer func() { span.Finish(err) }()
+
+	daemonStyle, err := apminject.HasDaemonStylePackage()
+	if err != nil {
+		return err
+	}
+	if daemonStyle {
+		log.Infof("APM inject: removing using daemon-style systemd service mode")
+		return apminject.NewSystemdServiceManager().Uninstall(ctx)
+	}
+
+	log.Infof("APM inject: removing using legacy installer mode")
 	installer := apminject.NewInstaller()
 	defer func() { installer.Finish(err) }()
 	return installer.Remove(ctx)
@@ -67,6 +94,17 @@ func preRemoveAPMInjector(ctx HookContext) (err error) {
 func InstrumentAPMInjector(ctx context.Context, method string) (err error) {
 	span, ctx := telemetry.StartSpanFromContext(ctx, "instrument_injector")
 	defer func() { span.Finish(err) }()
+
+	daemonStyle, err := apminject.HasDaemonStylePackage()
+	if err != nil {
+		return err
+	}
+	if daemonStyle {
+		log.Infof("APM inject: instrumenting using daemon-style systemd service mode")
+		return apminject.NewSystemdServiceManager().Install(ctx)
+	}
+
+	log.Infof("APM inject: instrumenting using legacy installer mode")
 	installer := apminject.NewInstaller()
 	installer.Env.InstallScript.APMInstrumentationEnabled = method
 	defer func() { installer.Finish(err) }()
@@ -77,6 +115,17 @@ func InstrumentAPMInjector(ctx context.Context, method string) (err error) {
 func UninstrumentAPMInjector(ctx context.Context, method string) (err error) {
 	span, ctx := telemetry.StartSpanFromContext(ctx, "uninstrument_injector")
 	defer func() { span.Finish(err) }()
+
+	daemonStyle, err := apminject.HasDaemonStylePackage()
+	if err != nil {
+		return err
+	}
+	if daemonStyle {
+		log.Infof("APM inject: uninstrumenting using daemon-style systemd service mode")
+		return apminject.NewSystemdServiceManager().Uninstall(ctx)
+	}
+
+	log.Infof("APM inject: uninstrumenting using legacy installer mode")
 	installer := apminject.NewInstaller()
 	installer.Env.InstallScript.APMInstrumentationEnabled = method
 	defer func() { installer.Finish(err) }()
