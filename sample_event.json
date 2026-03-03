@@ -1,0 +1,251 @@
+{
+	"id": "AwAAAZywb3-XPta5YwAAABhBWnl3YjRBQUFBQ1c4Rk5vUXlwTFl3QUEAAABdMTE5Y2IwYjQtMGFiNS00NmExLWFiNGMtNjllNzcwZmY3ZTYyLXN5bnRoZXRpYy10aW1lLTE3NzI0ODUyMDAwMDAwMDAwMDBjLTE3NzI0OTExMTUxODkwMDAwMDFvAAAAjw",
+	"content": {
+		"timestamp": "2026-03-02T21:23:43.127Z",
+		"tags": [
+			"app:agentless-api",
+			"image_name:464622532012.dkr.ecr.us-east-1.amazonaws.com/dd-source/domains/cloud-security-platform/agentless/apps/apis/agentless-api/oci/appimage",
+			"host:i-0d4c0f161105d5350",
+			"rapid_domain:cloud-security-platform/agentless",
+			"container_name:agentless-api",
+			"container.baseimage.os:ubuntu_jammy_lts",
+			"container_id:cdfaf753421f4a44b8e9f0275ce84b2e4e761cd80e4d161b0f7984d1247f73bf",
+			"container.baseimage.isgbi:yes",
+			"image_tag:v99697074-73260c1",
+			"appimage.commit.sha:73260c16025e934d6e6735f350efe8c982df8ccd",
+			"service:agentless-api",
+			"git.repository_url:https://github.com/datadog/dd-source",
+			"kube_deployment:agentless-api",
+			"chart.commit.sha:73260c16025e934d6e6735f350efe8c982df8ccd",
+			"kube_ownerref_kind:replicaset",
+			"kube_app_instance:agentless-api",
+			"short_image:appimage",
+			"git.branch:dd-source",
+			"kube_ownerref_name:agentless-api-5b7c95f5bd",
+			"team:k9-agentless",
+			"chart-values.commit.sha:b9595f64f22e3ecdbff61fd50f09900329f1f05c",
+			"env:prod",
+			"architecture:linux-arm64",
+			"image_id:464622532012.dkr.ecr.us-east-1.amazonaws.com/dd-source/domains/cloud-security-platform/agentless/apps/apis/agentless-api/oci/appimage@sha256:5e73e0bc9979cc8c4632ed0f3ed220c81777b6b7d9570086",
+			"rapid_protocol:http",
+			"kube_container_name:agentless-api",
+			"kube_replica_set:agentless-api-5b7c95f5bd",
+			"container.baseimage.name:images/base/gbi-ubuntu_2204",
+			"display_container_name:agentless-api_agentless-api-5b7c95f5bd-m9h7c",
+			"kube_namespace:rapid-cloud-security-platform-agentless",
+			"format:oci",
+			"kube_qos:burstable",
+			"unused-fips-appimage.commit.sha:73260c16025e934d6e6735f350efe8c982df8ccd",
+			"kube_app_name:agentless-api",
+			"app.kubernetes.io/instance:agentless-api",
+			"kube_autoscaler_kind:datadogpodautoscaler",
+			"platform:rapid",
+			"rapid_app:agentless-api",
+			"rapid_language:go",
+			"pod_name:agentless-api-5b7c95f5bd-m9h7c",
+			"pod_phase:running",
+			"version:v99697074-73260c1",
+			"app.kubernetes.io/name:agentless-api",
+			"git.commit.sha:73260c16025e934d6e6735f350efe8c982df8ccd",
+			"default_env:prod",
+			"agent_version:7.76.0",
+			"cnab.installation:helm/v1::agentless-api.rapid-cloud-security-platform-agentless.network-edge1a.us1.prod.dog",
+			"source:dd_debugger",
+			"kube_service:agentless-api",
+			"datadog.submission_auth:api_key",
+			"datadog.api_key_uuid:4863d798-f5e9-469d-a4b9-3daf5d9a082f"
+		],
+		"service": "agentless-api",
+		"message": "RichError captured - kind=*errors.withStack message=*errors.withStack",
+		"attributes": {
+			"service": "agentless-api",
+			"logger": {
+				"thread_id": 280,
+				"method": "github.com/DataDog/dd-source/libs/go/log.RichError",
+				"thread_name": "",
+				"name": "",
+				"version": 2
+			},
+			"debugger": {
+				"snapshot": {
+					"stack": [
+						{
+							"fileName": "libs/go/log/fields.go",
+							"function": "github.com/DataDog/dd-source/libs/go/log.RichError",
+							"lineNumber": 146
+						},
+						{
+							"fileName": "libs/go/experiments/internal/retry/retry.go",
+							"function": "github.com/DataDog/dd-source/libs/go/experiments/internal/retry.Do",
+							"lineNumber": 76
+						},
+						{
+							"fileName": "libs/go/experiments/stream_cache.go",
+							"function": "github.com/DataDog/dd-source/libs/go/experiments.(*streamCache).watchExperimentsUntilCancellation",
+							"lineNumber": 357
+						},
+						{
+							"fileName": "libs/go/experiments/stream_cache.go",
+							"function": "github.com/DataDog/dd-source/libs/go/experiments.(*streamCache).initialize.func1",
+							"lineNumber": 133
+						},
+						{
+							"fileName": "src/runtime/asm_arm64.s",
+							"function": "runtime.goexit",
+							"lineNumber": 1268
+						}
+					],
+					"captures": {
+						"lines": {
+							"146": {
+								"locals": {
+									"callerStackTrace": {
+										"size": "4",
+										"elements": [
+											{
+												"type": "github.com/pkg/errors.Frame",
+												"value": "0x5ae05ec"
+											},
+											{
+												"type": "github.com/pkg/errors.Frame",
+												"value": "0x5aefbd8"
+											},
+											{
+												"type": "github.com/pkg/errors.Frame",
+												"value": "0x5aedfe8"
+											},
+											{
+												"type": "github.com/pkg/errors.Frame",
+												"value": "0x50bda34"
+											}
+										],
+										"type": "github.com/pkg/errors.StackTrace"
+									},
+									"re": {
+										"type": "github.com/DataDog/dd-source/libs/go/log.richError",
+										"fields": {
+											"stack": {
+												"isNull": true,
+												"type": "github.com/pkg/errors.StackTrace"
+											},
+											"handlingStack": {
+												"isNull": true,
+												"type": "github.com/pkg/errors.StackTrace"
+											},
+											"kind": {
+												"type": "string",
+												"value": "*errors.withStack"
+											},
+											"message": {
+												"type": "string",
+												"value": "grpc error received: rpc error: code = Unavailable desc = closing transport due to: connection error: desc = \"error reading from server: EOF\", received prior goaway: code: NO_ERROR, debug data: \"max_age\""
+											}
+										}
+									},
+									"err": {
+										"type": "error",
+										"fields": {
+											"data": {
+												"address": "0x400fbd7668",
+												"type": "*github.com/pkg/errors.withStack",
+												"fields": {
+													"stack": {
+														"address": "0x400fbd7650",
+														"size": "6",
+														"elements": [
+															{
+																"type": "uintptr",
+																"value": "0x5af0060"
+															},
+															{
+																"type": "uintptr",
+																"value": "0x5aefc98"
+															},
+															{
+																"type": "uintptr",
+																"value": "0x5ae05b4"
+															},
+															{
+																"type": "uintptr",
+																"value": "0x5aefbd8"
+															},
+															{
+																"type": "uintptr",
+																"value": "0x5aedfe8"
+															},
+															{
+																"type": "uintptr",
+																"value": "0x50bda34"
+															}
+														],
+														"type": "*github.com/pkg/errors.stack"
+													},
+													"error": {
+														"type": "error",
+														"fields": {
+															"data": {
+																"address": "0x40150ff700",
+																"type": "*github.com/pkg/errors.withMessage",
+																"fields": {
+																	"msg": {
+																		"type": "string",
+																		"value": "grpc error received"
+																	},
+																	"cause": {
+																		"type": "error",
+																		"fields": {
+																			"data": {
+																				"address": "0x400199d700",
+																				"type": "*google.golang.org/grpc/internal/status.Error",
+																				"fields": {
+																					"s": {
+																						"notCapturedReason": "depth",
+																						"type": "*google.golang.org/grpc/internal/status.Status"
+																					}
+																				}
+																			}
+																		}
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+										}
+									},
+									"~r0": {
+										"notCapturedReason": "unavailable",
+										"type": "go.uber.org/zap/zapcore.Field"
+									}
+								}
+							}
+						}
+					},
+					"language": "go",
+					"id": "73071d69-0225-42eb-a897-6c5bf31320fa",
+					"timestamp": 1772486623127,
+					"probe": {
+						"location": {
+							"file": "libs/go/log/fields.go",
+							"method": "github.com/DataDog/dd-source/libs/go/log.RichError",
+							"line": 146
+						},
+						"id": "f28a3f3a-171f-4029-93c4-6fe301f1159f"
+					}
+				}
+			},
+			"dac": {
+				"metadata": {
+					"owner": "debugger",
+					"slack_channel": "#debugger",
+					"customer_data": "false",
+					"dac_applied": "false",
+					"data_source": "internal_tool"
+				},
+				"dataset": "dd_debugger"
+			},
+			"timestamp": 1772486623127
+		}
+	}
+}

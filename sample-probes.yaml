@@ -1,0 +1,91 @@
+# Sample Dynamic Instrumentation Probes Configuration
+# Use with system-probe.yaml:
+#   dynamic_instrumentation:
+#     enabled: true
+#     offline_mode: true
+#     probes_file_path: /path/to/sample-probes.yaml
+
+probes:
+  - id: my-snapshot-probe
+    type: LOG_PROBE
+    captureSnapshot: true
+    where:
+      methodName: main.myFunction
+    sampling:
+      snapshotsPerSecond: 1
+
+  # # Log probe with template - captures specific expressions only
+  # - id: my-log-probe
+  #   type: LOG_PROBE
+  #   captureSnapshot: false
+  #   where:
+  #     methodName: main.processRequest
+  #   template: "request id: {reqID}, user: {user}"
+  #   segments:
+  #     - str: "request id: "
+  #     - json:
+  #         ref: "reqID"
+  #       dsl: "reqID"
+  #     - str: ", user: "
+  #     - json:
+  #         ref: "user"
+  #       dsl: "user"
+
+  # # Line probe - instrument a specific line within a function
+  # - id: my-line-probe
+  #   type: LOG_PROBE
+  #   captureSnapshot: true
+  #   where:
+  #     methodName: main.myFunction
+  #     sourceFile: myfile.go
+  #     lines:
+  #       - "42"
+  #   sampling:
+  #     snapshotsPerSecond: 10
+
+  # # Probe with capture limits for large data structures
+  # - id: limited-probe
+  #   type: LOG_PROBE
+  #   captureSnapshot: true
+  #   where:
+  #     methodName: main.handleData
+  #   capture:
+  #     maxReferenceDepth: 3
+  #     maxCollectionSize: 10
+  #     maxLength: 256
+  #     maxFieldCount: 20
+
+  # # Capture expression probe - extract specific values without full snapshot
+  # - id: expr-probe
+  #   type: LOG_PROBE
+  #   captureSnapshot: false
+  #   where:
+  #     methodName: main.compute
+  #   captureExpressions:
+  #     - name: "result_value"
+  #       expr:
+  #         dsl: "result"
+  #         json:
+  #           ref: "result"
+  #     - name: "nested_field"
+  #       expr:
+  #         dsl: "obj.field"
+  #         json:
+  #           getmember:
+  #             - ref: "obj"
+  #             - "field"
+
+  # # Metric probe - emit a metric when function is called
+  # - id: my-metric
+  #   type: METRIC_PROBE
+  #   where:
+  #     methodName: main.processItem
+  #   kind: count
+  #   metricName: "items.processed"
+
+  # # Span probe - create a span for tracing
+  # - id: my-span
+  #   type: SPAN_PROBE
+  #   where:
+  #     methodName: main.handleRequest
+  #   evaluateAt: "exit"
