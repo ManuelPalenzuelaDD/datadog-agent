@@ -34,6 +34,7 @@
 '@datadog/container-platform': '#container-platform'
 '@datadog/core-authn': '#aaa-authn'
 '@datadog/data-jobs-monitoring': '#data-jobs-monitoring'
+'@datadog/data-observability': '#data-observability'
 '@datadog/data-streams-monitoring': '#data-streams-monitoring'
 '@datadog/database-monitoring': '#database-monitoring'
 '@datadog/debugger-go': '#debugger-go'
