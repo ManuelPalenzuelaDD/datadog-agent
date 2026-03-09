@@ -1,0 +1,386 @@
+[
+  {
+    "id": "T01",
+    "title": "Cap'n Proto schema (metrics + logs only)",
+    "description": "Create schema/pipelinesink/signals.capnp defining SignalEnvelope (union), MetricBatch, MetricSample, LogBatch, LogEntry. Reserve union fields @2–@4 for future TraceBatch/ProfileBatch/TraceStatBatch without assigning them. Include all fields documented in specs/recorder-pipeline.md. The file ID must be a valid 64-bit hex constant.",
+    "files": [
+      "schema/pipelinesink/signals.capnp"
+    ],
+    "dependencies": [],
+    "success_criteria": [
+      "`capnp compile -ogo schema/pipelinesink/signals.capnp` exits 0",
+      "`capnp compile -orust schema/pipelinesink/signals.capnp` exits 0",
+      "MetricSample has exactly 6 fields: name, value, tags, timestampNs, sampleRate, source",
+      "LogEntry has exactly 6 fields: content (Data), status, tags, hostname, timestampNs, source",
+      "SignalEnvelope union contains metricBatch @0 and logBatch @1; fields @2–@4 are commented reserved placeholders",
+      "Benchmark N/A: schema compilation is the measurable criterion here; `time capnp compile` must finish in <2s"
+    ]
+  },
+  {
+    "id": "T02",
+    "title": "Go Cap'n Proto bindings generation",
+    "description": "Run capnpc-go on schema/pipelinesink/signals.capnp to produce schema/pipelinesink/signals.capnp.go. Add the package to go.work or the appropriate go.mod so it is reachable from comp/pipelinesink. Add a go:generate directive in a doc.go to make regeneration repeatable.",
+    "files": [
+      "schema/pipelinesink/signals.capnp.go",
+      "schema/pipelinesink/doc.go",
+      "schema/pipelinesink/go.mod"
+    ],
+    "dependencies": ["T01"],
+    "success_criteria": [
+      "`go build ./schema/pipelinesink/...` exits 0",
+      "Generated file contains Go types for SignalEnvelope, MetricBatch, MetricSample, LogBatch, LogEntry",
+      "`go vet ./schema/pipelinesink/...` exits 0",
+      "Benchmark: `go test -bench=BenchmarkNoop ./schema/pipelinesink/...` completes (smoke test that the package is importable)"
+    ]
+  },
+  {
+    "id": "T03",
+    "title": "Transport abstraction interface (Go)",
+    "description": "Create comp/pipelinesink/impl/transport.go defining the Transport interface (Send([]byte) error, Close() error) and unixTransport implementing it. unixTransport must maintain a persistent connection to the Unix socket with exponential backoff reconnect (100ms initial, 2x multiplier, 30s cap). If Send is called while disconnected it must return an error immediately (no blocking). Include a Dial method. The reconnect loop must be goroutine-leak-free (cancelable via context).",
+    "files": [
+      "comp/pipelinesink/impl/transport.go"
+    ],
+    "dependencies": [],
+    "success_criteria": [
+      "`go build ./comp/pipelinesink/impl/` exits 0",
+      "Unit test: start a local Unix socket server, create unixTransport, call Send — assert message received",
+      "Unit test: start unixTransport with no server running — Send returns a non-nil error within 10ms",
+      "Unit test: server starts 200ms after transport — transport reconnects automatically and Send succeeds",
+      "Goroutine leak test: goleak.VerifyNone after Close() — no goroutines left behind",
+      "Benchmark: `go test -bench=BenchmarkTransportSend -benchtime=5s ./comp/pipelinesink/impl/` reports ≥ 500000 ns/op-level throughput (i.e., ≥ 500k sends/s on loopback)"
+    ]
+  },
+  {
+    "id": "T04",
+    "title": "comp/pipelinesink/def/component.go",
+    "description": "Create the public component interface for the pipeline sink. Define Component interface with a single Stats() Stats method. Define Stats struct with fields: MetricsSent, LogsSent, MetricsDropped, LogsDropped, BytesSent, Reconnects (all uint64). Keep this package dependency-free (no fx, no internal imports).",
+    "files": [
+      "comp/pipelinesink/def/component.go"
+    ],
+    "dependencies": [],
+    "success_criteria": [
+      "`go build ./comp/pipelinesink/def/` exits 0",
+      "`go vet ./comp/pipelinesink/def/` exits 0",
+      "Stats struct has exactly 6 uint64 fields matching the spec",
+      "Benchmark: package imports in <1ms (no heavy deps); verify with `go list -f '{{.Imports}}' ./comp/pipelinesink/def/`"
+    ]
+  },
+  {
+    "id": "T05",
+    "title": "Cap'n Proto encoder helpers (Go)",
+    "description": "Create comp/pipelinesink/impl/encoder.go with functions EncodeMetricBatch(samples []capturedMetric) ([]byte, error) and EncodeLogBatch(entries []capturedLog) ([]byte, error). Each function allocates a capnp.NewSingleSegmentArena, builds the appropriate Cap'n Proto message, and writes the packed stream bytes. Define capturedMetric{Name, Value, Tags, TimestampNs, SampleRate, Source} and capturedLog{Content, Status, Tags, Hostname, TimestampNs, Source} as the internal copy types.",
+    "files": [
+      "comp/pipelinesink/impl/encoder.go"
+    ],
+    "dependencies": ["T02"],
+    "success_criteria": [
+      "`go build ./comp/pipelinesink/impl/` exits 0",
+      "Unit test: EncodeMetricBatch([]{name:'cpu', value:1.5, tags:['host:a'], timestampNs:1000, sampleRate:1.0, source:'test'}) decodes back to identical values",
+      "Unit test: EncodeLogBatch([]{content:[]byte('hello'), status:'info', tags:[], hostname:'h1', timestampNs:2000, source:'s'}) decodes back to identical values",
+      "Unit test: empty batch encodes and decodes without error",
+      "Benchmark: `go test -bench=BenchmarkEncodeMetric -benchtime=5s ./comp/pipelinesink/impl/` reports ≥ 500000 encodes/s (i.e., BenchmarkEncodeMetric/1000-items ns/op ≤ 2000000)",
+      "Benchmark: `go test -bench=BenchmarkEncodeLog -benchtime=5s ./comp/pipelinesink/impl/` reports ≥ 500000 encodes/s"
+    ]
+  },
+  {
+    "id": "T06",
+    "title": "Unix socket connection manager (Go)",
+    "description": "This task is now merged into T03 (transport.go already covers the connection manager). Verify that transport.go is complete: connection manager with reconnect loop, exponential backoff (100ms→30s), context cancellation for clean shutdown, and zero leaked goroutines on Close().",
+    "files": [
+      "comp/pipelinesink/impl/transport.go"
+    ],
+    "dependencies": ["T03"],
+    "success_criteria": [
+      "Reconnect test: server disappears and reappears — transport recovers within 2x the current backoff interval",
+      "Backoff test: log backoff durations — assert 100ms, 200ms, 400ms sequence before cap",
+      "Goroutine leak test: goleak.VerifyNone after Close() in all scenarios (never connected, connected, mid-reconnect)",
+      "Benchmark: measure reconnect overhead — 1000 reconnect cycles in <5s on loopback"
+    ]
+  },
+  {
+    "id": "T07",
+    "title": "Signal batcher with ring buffers (Go)",
+    "description": "Create comp/pipelinesink/impl/batcher.go. Implement a Batcher struct that holds per-type ring buffers (metrics and logs) with configurable capacity (default 1000). AddMetric/AddLog methods are called from hook callbacks and must return immediately. A background flush goroutine drains buffers every flushInterval, encodes batches via encoder.go, and calls Transport.Send(). When a ring buffer is full the oldest item is overwritten (not newest dropped) and a drop counter increments. The goroutine must be stoppable via Stop() with a clean shutdown (no goroutine leaks).",
+    "files": [
+      "comp/pipelinesink/impl/batcher.go"
+    ],
+    "dependencies": ["T05"],
+    "success_criteria": [
+      "`go build ./comp/pipelinesink/impl/` exits 0",
+      "Unit test: Add 5 metrics, wait 150ms — assert Transport.Send called with a MetricBatch containing 5 samples",
+      "Unit test: Add capacity+10 metrics before flush — assert drop counter == 10, sent count == capacity",
+      "Unit test: Stop() with no goroutine leaks (goleak.VerifyNone)",
+      "Unit test: flush when transport returns error — drop counter increments, no panic",
+      "Benchmark: `go test -bench=BenchmarkBatcherAdd -benchtime=5s ./comp/pipelinesink/impl/` reports ≥ 1000000 AddMetric calls/s (i.e., AddMetric ns/op ≤ 1000)"
+    ]
+  },
+  {
+    "id": "T08",
+    "title": "sink.go constructor and hook subscriptions",
+    "description": "Create comp/pipelinesink/impl/sink.go with NewComponent(req Requires) (Provides, error). The Requires struct must embed Config, and fx groups for []hook.Hook[observer.MetricView] and []hook.Hook[observer.LogView] (tag: group:\"hook\"). When pipelinesink.enabled=false, return a no-op implementation that satisfies the Component interface but does nothing. When enabled, subscribe to all hooks via fxutil.GetAndFilterGroup, copy payloads into the batcher, start the flush goroutine, and register lifecycle start/stop hooks. Follow the exact pattern from comp/anomalydetection/recorder/impl/recorder.go.",
+    "files": [
+      "comp/pipelinesink/impl/sink.go"
+    ],
+    "dependencies": ["T04", "T07"],
+    "success_criteria": [
+      "`go build ./comp/pipelinesink/impl/` exits 0",
+      "Unit test: NewComponent with enabled=false returns no-op component; Stats() returns zero Stats",
+      "Unit test: NewComponent with enabled=true and a mock hook — publish a metric — assert batcher receives it",
+      "Unit test: lifecycle Stop() drains the batcher and closes transport",
+      "Unit test: two hook instances subscribed — both receive payloads independently",
+      "Benchmark: `go test -bench=BenchmarkSinkObserveMetric ./comp/pipelinesink/impl/` — hook callback overhead ≤ 500ns/op (copy + enqueue only)"
+    ]
+  },
+  {
+    "id": "T09",
+    "title": "fx module boilerplate (Go)",
+    "description": "Create comp/pipelinesink/fx/fx.go providing Module() fxutil.Module. Use fxutil.Component + fxutil.ProvideComponentConstructor(recorderimpl.NewComponent) + fxutil.ProvideOptional[pipelinesink.Component](). Mirror comp/anomalydetection/recorder/fx/fx.go exactly.",
+    "files": [
+      "comp/pipelinesink/fx/fx.go"
+    ],
+    "dependencies": ["T08"],
+    "success_criteria": [
+      "`go build ./comp/pipelinesink/fx/` exits 0",
+      "`go vet ./comp/pipelinesink/fx/` exits 0",
+      "Unit test (fx.TestModule): fxtest.New(t, Module()) with mock Config and empty hook groups starts without error",
+      "Benchmark: Module() construction overhead < 1ms (smoke test)"
+    ]
+  },
+  {
+    "id": "T10",
+    "title": "Telemetry counters (Go)",
+    "description": "Create comp/pipelinesink/impl/telemetry.go. Register Prometheus/telemetry counters: pipelinesink_metrics_sent_total, pipelinesink_logs_sent_total, pipelinesink_metrics_dropped_total, pipelinesink_logs_dropped_total, pipelinesink_bytes_sent_total, pipelinesink_reconnects_total. Wire them into the batcher and transport so they increment correctly. Also expose them via the Stats() method on the component.",
+    "files": [
+      "comp/pipelinesink/impl/telemetry.go"
+    ],
+    "dependencies": ["T08"],
+    "success_criteria": [
+      "`go build ./comp/pipelinesink/impl/` exits 0",
+      "Unit test: send 10 metrics and 5 logs — assert Stats().MetricsSent==10 and Stats().LogsSent==5",
+      "Unit test: fill buffer to capacity+3 — assert Stats().MetricsDropped==3",
+      "Unit test: force transport error — assert Stats().Reconnects increments",
+      "Memory benchmark: `go test -bench=BenchmarkTelemetryOverhead -memprofile=mem.out` — RSS delta from telemetry counters alone < 1MB; verify with `go tool pprof -alloc_space mem.out`",
+      "Load test: stream 100k metrics in 1s — assert agent RSS delta (before vs after) < 5MB using `runtime.ReadMemStats` in the test"
+    ]
+  },
+  {
+    "id": "T11",
+    "title": "Wire pipelinesink into agent fx graph",
+    "description": "Add comp/pipelinesink/fx.Module() to the main agent fx application (cmd/agent/). Register default config values for all pipelinesink.* keys (see specs/recorder-pipeline.md config table). Default pipelinesink.enabled to false so the change is a no-op for existing deployments. Ensure `dda inv agent.build --build-exclude=systemd` succeeds.",
+    "files": [
+      "cmd/agent/main_common.go",
+      "comp/pipelinesink/impl/config_defaults.go"
+    ],
+    "dependencies": ["T09", "T10"],
+    "success_criteria": [
+      "`dda inv agent.build --build-exclude=systemd` exits 0",
+      "`dda inv test --targets=./comp/pipelinesink/...` exits 0",
+      "Agent starts with default config (pipelinesink.enabled=false) and logs no pipelinesink errors",
+      "Agent starts with pipelinesink.enabled=true and logs 'pipelinesink started' or equivalent",
+      "Benchmark: agent binary size increase from adding the module < 2MB (check with `ls -lh bin/agent/agent`)"
+    ]
+  },
+  {
+    "id": "T12",
+    "title": "Docker Compose dev environment",
+    "description": "Create tools/pipelinerecorder/docker-compose.yml with two services: agent (DataDog Agent with pipelinesink.enabled=true, socket volume mounted) and recorder (pipelinerecorder binary, socket + data volumes mounted). Add a pipeline-socket emptyDir-equivalent volume and a pipeline-data volume. Include health checks. Document the workflow in a README section or comments in the compose file.",
+    "files": [
+      "tools/pipelinerecorder/docker-compose.yml",
+      "tools/pipelinerecorder/docker-compose.env"
+    ],
+    "dependencies": ["T11", "T19"],
+    "success_criteria": [
+      "`docker compose -f tools/pipelinerecorder/docker-compose.yml config` exits 0 (validates YAML)",
+      "`docker compose up --wait` both services reach healthy state within 60s",
+      "After 30s of agent running, at least one .vortex file exists under the pipeline-data volume",
+      "`docker stats --no-stream` shows recorder service CPU < 5% at steady state",
+      "Benchmark: `docker stats --no-stream --format '{{.MemUsage}}'` for agent container — RSS increase vs baseline (pipelinesink.enabled=false) < 5MB"
+    ]
+  },
+  {
+    "id": "T13",
+    "title": "Rust workspace and build.rs capnp generation",
+    "description": "Create tools/pipelinerecorder/Cargo.toml as a Cargo workspace (or single crate). Add dependencies: capnp, capnp-futures, tokio (full features), clap (derive), vortex (latest), criterion (dev). Create build.rs that runs capnpc::CompilerCommand on schema/pipelinesink/signals.capnp and emits the Rust bindings into OUT_DIR. Ensure `cargo build` works from the tools/pipelinerecorder/ directory.",
+    "files": [
+      "tools/pipelinerecorder/Cargo.toml",
+      "tools/pipelinerecorder/build.rs"
+    ],
+    "dependencies": ["T01"],
+    "success_criteria": [
+      "`cargo build` in tools/pipelinerecorder/ exits 0",
+      "OUT_DIR contains signals_capnp.rs with Rust types for SignalEnvelope, MetricBatch, LogBatch",
+      "`cargo test` exits 0",
+      "Benchmark: `cargo build --release` completes in < 3 minutes on a modern laptop (track with `time cargo build --release`)"
+    ]
+  },
+  {
+    "id": "T14",
+    "title": "Transport abstraction trait (Rust)",
+    "description": "Create tools/pipelinerecorder/src/transport.rs. Define `trait Transport: Send { async fn recv(&mut self) -> Result<Bytes>; }`. Implement UnixSocketTransport wrapping a tokio::net::UnixListener that accepts connections and reads framed bytes. The implementation must handle reconnections gracefully (client side reconnects; server side just accepts new connections). Use async-trait or RPITIT as appropriate for the Rust edition.",
+    "files": [
+      "tools/pipelinerecorder/src/transport.rs"
+    ],
+    "dependencies": ["T13"],
+    "success_criteria": [
+      "`cargo build` exits 0",
+      "`cargo test transport` exits 0",
+      "Unit test: bind UnixSocketTransport, connect a writer, write bytes — recv() returns the same bytes",
+      "Unit test: client disconnects and reconnects — recv() returns data from both connections without panic",
+      "Benchmark: `cargo bench transport` — UnixSocketTransport::recv throughput ≥ 500000 frames/s on loopback"
+    ]
+  },
+  {
+    "id": "T15",
+    "title": "Rust Cap'n Proto packed-stream frame reader",
+    "description": "Create tools/pipelinerecorder/src/framing.rs. Implement async read_message(reader: &mut impl AsyncRead) -> Result<SignalEnvelope> using capnp_futures::serialize_packed::read_message. Wrap it so callers get strongly-typed SignalEnvelope readers. Handle EOF and partial-read errors with descriptive context.",
+    "files": [
+      "tools/pipelinerecorder/src/framing.rs"
+    ],
+    "dependencies": ["T13", "T14"],
+    "success_criteria": [
+      "`cargo build` exits 0",
+      "`cargo test framing` exits 0",
+      "Unit test: encode a MetricBatch in Go (or directly in Rust), write to in-memory cursor, decode with framing.rs — assert field values match",
+      "Unit test: truncated frame returns Err (not panic)",
+      "Unit test: two frames back-to-back in a single buffer — both decoded correctly",
+      "Benchmark: `cargo bench framing` — decode throughput ≥ 500000 frames/s for a 10-sample MetricBatch"
+    ]
+  },
+  {
+    "id": "T16",
+    "title": "Rust Vortex metrics writer",
+    "description": "Create tools/pipelinerecorder/src/writers/metrics.rs. Implement MetricsWriter::push(batch: MetricBatch) and MetricsWriter::flush() -> Result<PathBuf>. flush() writes accumulated rows to a new Vortex file named metrics-<unix_timestamp_ms>.vortex in the configured output directory. Schema: name (Utf8), value (Float64), tags (List(Utf8)), timestamp_ns (Int64), sample_rate (Float64), source (Utf8). Flush triggers: row count >= flush_rows OR time since last flush >= flush_interval.",
+    "files": [
+      "tools/pipelinerecorder/src/writers/metrics.rs",
+      "tools/pipelinerecorder/src/writers/mod.rs"
+    ],
+    "dependencies": ["T15"],
+    "success_criteria": [
+      "`cargo build` exits 0",
+      "`cargo test writers::metrics` exits 0",
+      "Unit test: push 100 MetricSamples, flush — resulting .vortex file exists and is readable via vortex",
+      "Unit test: read back all 100 rows — assert name/value/tags/timestampNs/source match input",
+      "Unit test: push 0 rows and flush — no .vortex file created (or empty file handled gracefully)",
+      "Benchmark: `cargo bench writers::metrics` — push+flush throughput ≥ 1000000 rows/s for 10000-row batches"
+    ]
+  },
+  {
+    "id": "T17",
+    "title": "Rust Vortex logs writer",
+    "description": "Create tools/pipelinerecorder/src/writers/logs.rs. Implement LogsWriter::push(batch: LogBatch) and LogsWriter::flush() -> Result<PathBuf>. Schema: content (Binary), status (Utf8), tags (List(Utf8)), hostname (Utf8), timestamp_ns (Int64), source (Utf8). Apply same flush triggers as T16.",
+    "files": [
+      "tools/pipelinerecorder/src/writers/logs.rs"
+    ],
+    "dependencies": ["T15"],
+    "success_criteria": [
+      "`cargo build` exits 0",
+      "`cargo test writers::logs` exits 0",
+      "Unit test: push a LogEntry with binary content containing null bytes — round-trip preserves exact bytes",
+      "Unit test: push 50 entries, flush — read back and assert all fields match",
+      "Unit test: large content field (1MB binary blob) — no truncation, no panic",
+      "Benchmark: `cargo bench writers::logs` — push+flush throughput ≥ 1000000 rows/s for 10000-row batches"
+    ]
+  },
+  {
+    "id": "T18",
+    "title": "Rust main entry point with graceful shutdown",
+    "description": "Create tools/pipelinerecorder/src/main.rs and tools/pipelinerecorder/src/config.rs. main.rs: tokio runtime, bind Unix socket via UnixSocketTransport, spawn accept loop, install SIGTERM/SIGINT handler that flushes all writers and exits cleanly. config.rs: clap-derived Config struct for all options listed in specs/recorder-pipeline.md. Log startup config at INFO level.",
+    "files": [
+      "tools/pipelinerecorder/src/main.rs",
+      "tools/pipelinerecorder/src/config.rs"
+    ],
+    "dependencies": ["T16", "T17"],
+    "success_criteria": [
+      "`cargo build --release` exits 0",
+      "`./target/release/pipelinerecorder --help` shows all flags",
+      "Integration test: start binary, send SIGTERM — binary exits 0 within 5s",
+      "Integration test: start binary, send 10 metric frames over Unix socket — assert .vortex files created in output-dir",
+      "Benchmark: `docker stats --no-stream` on container running at 100k messages/s — CPU < 5%; `/usr/bin/time -v` RSS < 50MB"
+    ]
+  },
+  {
+    "id": "T19",
+    "title": "Dockerfile for pipelinerecorder",
+    "description": "Create tools/pipelinerecorder/Dockerfile as a multi-stage build. Stage 1 (builder): rust:latest, copy source + schema, run cargo build --release. Stage 2 (runtime): debian:bookworm-slim or distroless/cc, copy binary only. The final image must be < 50MB compressed. Set ENTRYPOINT to the binary. Add HEALTHCHECK.",
+    "files": [
+      "tools/pipelinerecorder/Dockerfile"
+    ],
+    "dependencies": ["T18"],
+    "success_criteria": [
+      "`docker build -t pipelinerecorder:test tools/pipelinerecorder/` exits 0",
+      "`docker image inspect pipelinerecorder:test --format '{{.Size}}'` shows < 52428800 bytes (50MB)",
+      "`docker run --rm pipelinerecorder:test --help` exits 0 and shows CLI usage",
+      "Benchmark: `time docker build tools/pipelinerecorder/` — build time < 10 minutes from clean cache on CI-class hardware (document baseline)"
+    ]
+  },
+  {
+    "id": "T20",
+    "title": "Kubernetes sidecar YAML and kustomization",
+    "description": "Create deploy/kubernetes/pipelinerecorder/sidecar-patch.yaml (strategic-merge patch adding the pipelinerecorder container and emptyDir volumes to the agent DaemonSet) and deploy/kubernetes/pipelinerecorder/kustomization.yaml referencing the patch. The patch must not hardcode the agent DaemonSet name — use a variable or document the substitution.",
+    "files": [
+      "deploy/kubernetes/pipelinerecorder/sidecar-patch.yaml",
+      "deploy/kubernetes/pipelinerecorder/kustomization.yaml"
+    ],
+    "dependencies": ["T19"],
+    "success_criteria": [
+      "`kubectl apply --dry-run=client -f deploy/kubernetes/pipelinerecorder/sidecar-patch.yaml` exits 0 against a live cluster or with `--validate=false`",
+      "`kustomize build deploy/kubernetes/pipelinerecorder/` exits 0 and produces valid YAML",
+      "Output YAML contains the pipelinerecorder container with correct env vars (RECORDER_SOCKET_PATH, RECORDER_OUTPUT_DIR)",
+      "Output YAML contains the pipeline-socket emptyDir volume and correct volumeMounts on both containers",
+      "Benchmark: `time kustomize build` < 2s (confirms no heavy processing)"
+    ]
+  },
+  {
+    "id": "T21",
+    "title": "Go integration test: round-trip 100 metrics + 50 logs",
+    "description": "Create comp/pipelinesink/impl/integration_test.go (build tag: //go:build integration). The test must: start a local Unix socket server, create a pipelinesink with enabled=true pointing to the socket, publish 100 MetricView and 50 LogView via mock hooks, wait for the socket server to receive complete batches, decode the Cap'n Proto frames, and assert all field values are correct. The test must complete in < 5s and the agent goroutine RSS delta (before vs after, measured with runtime.ReadMemStats) must be < 5MB.",
+    "files": [
+      "comp/pipelinesink/impl/integration_test.go"
+    ],
+    "dependencies": ["T08", "T10"],
+    "success_criteria": [
+      "`dda inv test --targets=./comp/pipelinesink/... -run TestIntegrationRoundTrip` exits 0",
+      "100 MetricSamples decoded from socket — all names, values, tags, timestamps match input",
+      "50 LogEntries decoded from socket — all content bytes, status, hostname, tags match input",
+      "Test completes in < 5s",
+      "runtime.ReadMemStats before vs after: HeapAlloc delta < 5MB",
+      "goleak.VerifyNone at end of test — zero goroutine leaks"
+    ]
+  },
+  {
+    "id": "T22",
+    "title": "Rust e2e test: 500 metrics + 200 logs written to Vortex files",
+    "description": "Create tools/pipelinerecorder/tests/e2e_test.rs. The test must: spawn the pipelinerecorder binary (or call main logic directly), connect a Go or Rust client, send 500 MetricSamples and 200 LogEntries as Cap'n Proto frames, wait for flush, read back the .vortex files using the vortex crate, and assert correct row counts and spot-check field values. The test must complete in < 10s.",
+    "files": [
+      "tools/pipelinerecorder/tests/e2e_test.rs"
+    ],
+    "dependencies": ["T18"],
+    "success_criteria": [
+      "`cargo test --test e2e_test` exits 0",
+      "metrics-*.vortex file exists and contains exactly 500 rows",
+      "logs-*.vortex file exists and contains exactly 200 rows",
+      "Spot-check: first MetricSample name/value/tags match what was sent",
+      "Spot-check: first LogEntry content bytes match what was sent",
+      "Test completes in < 10s",
+      "Benchmark: `cargo bench e2e` (if criterion bench added) — 500-metric round-trip < 1s"
+    ]
+  },
+  {
+    "id": "T23",
+    "title": "Config defaults registration and documentation",
+    "description": "Create comp/pipelinesink/impl/config_defaults.go with a RegisterDefaults() function (called from sink.go NewComponent) that registers all pipelinesink.* keys with their defaults using the agent config system. Verify all keys from the specs/recorder-pipeline.md config table are registered. Add a brief config section to specs/recorder-pipeline.md if not already complete.",
+    "files": [
+      "comp/pipelinesink/impl/config_defaults.go"
+    ],
+    "dependencies": ["T08"],
+    "success_criteria": [
+      "`dda inv test --targets=./comp/pipelinesink/... -run TestConfigDefaults` exits 0",
+      "Test asserts that GetBool('pipelinesink.enabled') returns false by default",
+      "Test asserts that GetString('pipelinesink.socket_path') returns '/var/run/pipelinesink/pipeline.sock'",
+      "Test asserts that GetDuration('pipelinesink.flush_interval') returns 100ms",
+      "Test asserts that GetInt('pipelinesink.buffer_capacity') returns 1000",
+      "Test asserts that GetDuration('pipelinesink.reconnect_max_interval') returns 30s",
+      "Benchmark: `go test -bench=BenchmarkConfigLookup ./comp/pipelinesink/impl/` — GetBool overhead < 500ns/op (confirms no accidental reflection loop)"
+    ]
+  }
+]
