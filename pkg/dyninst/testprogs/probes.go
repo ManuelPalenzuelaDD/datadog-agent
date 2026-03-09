@@ -77,9 +77,17 @@ func getProbeDefinitions(name string) ([]ir.ProbeDefinition, error) {
 }
 
 // IssueTagPrefix is the prefix of the issue tag.
+// Formats:
+//   - issue:REASON - unconditional skip
+//   - issue:REASON@arch=ARCH - skip on specific architecture
+//   - issue:REASON@version=VERSION - skip on exact version match
+//   - issue:REASON@version>=VERSION - skip when toolchain >= version
+//   - issue:REASON@arch=ARCH,version=VERSION - skip on arch with exact version
+//   - issue:REASON@arch=ARCH,version>=VERSION - skip on arch with version >=
 const IssueTagPrefix = "issue:"
 
 // GetIssueTag returns the issue tag for a probe definition.
+// Returns the full tag value (including any conditions).
 func GetIssueTag(p ir.ProbeDefinition) (string, bool) {
 	tags := p.GetTags()
 	index := slices.IndexFunc(tags, func(tag string) bool {
@@ -91,8 +99,78 @@ func GetIssueTag(p ir.ProbeDefinition) (string, bool) {
 	return tags[index][len(IssueTagPrefix):], true
 }
 
-// HasIssueTag returns true if the probe definition has an issue tag.
+// HasIssueTag returns true if the probe definition has an unconditional issue tag
+// (i.e., an issue tag without @arch= or @version= conditions).
 func HasIssueTag(p ir.ProbeDefinition) bool {
-	_, ok := GetIssueTag(p)
-	return ok
+	tag, ok := GetIssueTag(p)
+	if !ok {
+		return false
+	}
+	// Unconditional if there's no @ condition
+	return !strings.Contains(tag, "@")
+}
+
+// ShouldSkipForConfig returns true if the probe should be skipped for the given
+// architecture and toolchain combination based on conditional issue tags.
+// This checks issue tags with @arch=, @version= (exact), and/or @version>= conditions.
+func ShouldSkipForConfig(p ir.ProbeDefinition, arch, toolchain string) bool {
+	for _, tag := range p.GetTags() {
+		if !strings.HasPrefix(tag, IssueTagPrefix) {
+			continue
+		}
+		value := strings.TrimPrefix(tag, IssueTagPrefix)
+
+		// Find the @ separator for conditions
+		atIdx := strings.Index(value, "@")
+		if atIdx == -1 {
+			// Unconditional issue tag - handled by HasIssueTag
+			continue
+		}
+
+		// Parse conditions after @
+		conditions := value[atIdx+1:]
+		if matchesIssueConditions(conditions, arch, toolchain) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesIssueConditions checks if the given arch and toolchain match the conditions.
+// Conditions format:
+//   - "arch=ARCH" - exact architecture match
+//   - "version=VERSION" - exact version match
+//   - "version>=VERSION" - version greater than or equal
+//   - Combinations: "arch=ARCH,version=VERSION" or "arch=ARCH,version>=VERSION"
+func matchesIssueConditions(conditions, arch, toolchain string) bool {
+	var requireArch string
+	var requireVersionExact string
+	var requireVersionGeq string
+
+	for _, cond := range strings.Split(conditions, ",") {
+		cond = strings.TrimSpace(cond)
+		if strings.HasPrefix(cond, "arch=") {
+			requireArch = strings.TrimPrefix(cond, "arch=")
+		} else if strings.HasPrefix(cond, "version>=") {
+			requireVersionGeq = strings.TrimPrefix(cond, "version>=")
+		} else if strings.HasPrefix(cond, "version=") {
+			requireVersionExact = strings.TrimPrefix(cond, "version=")
+		}
+	}
+
+	// Check arch condition
+	if requireArch != "" && requireArch != arch {
+		return false
+	}
+
+	// Check version conditions
+	if requireVersionExact != "" && toolchain != requireVersionExact {
+		return false
+	}
+	if requireVersionGeq != "" && toolchain < requireVersionGeq {
+		return false
+	}
+
+	// At least one condition must be specified
+	return requireArch != "" || requireVersionExact != "" || requireVersionGeq != ""
 }

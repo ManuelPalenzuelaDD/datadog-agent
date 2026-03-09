@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/DataDog/datadog-agent/pkg/dyninst/ir"
 )
 
 const inSubprocessEnvVar = "DD_DYNINST_TESTPROGS_IN_SUBPROCESS"
@@ -132,4 +134,204 @@ func testInitFromBinariesInSubprocess(t *testing.T) {
 	}
 	_, err = os.Stderr.Write(out)
 	require.NoError(t, err)
+}
+
+// mockProbe implements ir.ProbeDefinition for testing issue tag functions.
+type mockProbe struct {
+	tags []string
+}
+
+func (m *mockProbe) GetID() string                        { return "test" }
+func (m *mockProbe) GetVersion() int                      { return 0 }
+func (m *mockProbe) GetTags() []string                    { return m.tags }
+func (m *mockProbe) GetKind() ir.ProbeKind                { return ir.ProbeKindLog }
+func (m *mockProbe) GetWhere() ir.Where                   { return nil }
+func (m *mockProbe) GetCaptureConfig() ir.CaptureConfig   { return nil }
+func (m *mockProbe) GetThrottleConfig() ir.ThrottleConfig { return nil }
+func (m *mockProbe) GetTemplate() ir.TemplateDefinition   { return nil }
+func (m *mockProbe) GetCaptureExpressions() []ir.CaptureExpressionDefinition {
+	return nil
+}
+
+func TestHasIssueTag(t *testing.T) {
+	cases := []struct {
+		name     string
+		tags     []string
+		expected bool
+	}{
+		{
+			name:     "no tags",
+			tags:     nil,
+			expected: false,
+		},
+		{
+			name:     "no issue tag",
+			tags:     []string{"version_diff:go1.26rc1"},
+			expected: false,
+		},
+		{
+			name:     "unconditional issue tag",
+			tags:     []string{"issue:UnsupportedFeature"},
+			expected: true,
+		},
+		{
+			name:     "conditional issue tag with arch",
+			tags:     []string{"issue:Bug@arch=arm64"},
+			expected: false,
+		},
+		{
+			name:     "conditional issue tag with version",
+			tags:     []string{"issue:Bug@version=go1.26rc1"},
+			expected: false,
+		},
+		{
+			name:     "conditional issue tag with arch and version",
+			tags:     []string{"issue:Bug@arch=arm64,version=go1.26rc1"},
+			expected: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &mockProbe{tags: tc.tags}
+			require.Equal(t, tc.expected, HasIssueTag(p))
+		})
+	}
+}
+
+func TestShouldSkipForConfig(t *testing.T) {
+	cases := []struct {
+		name      string
+		tags      []string
+		arch      string
+		toolchain string
+		expected  bool
+	}{
+		{
+			name:      "no tags",
+			tags:      nil,
+			arch:      "amd64",
+			toolchain: "go1.24.3",
+			expected:  false,
+		},
+		{
+			name:      "unconditional issue tag not matched",
+			tags:      []string{"issue:UnsupportedFeature"},
+			arch:      "amd64",
+			toolchain: "go1.24.3",
+			expected:  false,
+		},
+		{
+			name:      "arch condition matches",
+			tags:      []string{"issue:Bug@arch=arm64"},
+			arch:      "arm64",
+			toolchain: "go1.24.3",
+			expected:  true,
+		},
+		{
+			name:      "arch condition does not match",
+			tags:      []string{"issue:Bug@arch=arm64"},
+			arch:      "amd64",
+			toolchain: "go1.24.3",
+			expected:  false,
+		},
+		{
+			name:      "exact version matches",
+			tags:      []string{"issue:Bug@version=go1.26rc1"},
+			arch:      "amd64",
+			toolchain: "go1.26rc1",
+			expected:  true,
+		},
+		{
+			name:      "exact version does not match greater",
+			tags:      []string{"issue:Bug@version=go1.26rc1"},
+			arch:      "amd64",
+			toolchain: "go1.27.0",
+			expected:  false,
+		},
+		{
+			name:      "exact version does not match lesser",
+			tags:      []string{"issue:Bug@version=go1.26rc1"},
+			arch:      "amd64",
+			toolchain: "go1.24.3",
+			expected:  false,
+		},
+		{
+			name:      "version>= matches exactly",
+			tags:      []string{"issue:Bug@version>=go1.26rc1"},
+			arch:      "amd64",
+			toolchain: "go1.26rc1",
+			expected:  true,
+		},
+		{
+			name:      "version>= matches greater",
+			tags:      []string{"issue:Bug@version>=go1.26rc1"},
+			arch:      "amd64",
+			toolchain: "go1.27.0",
+			expected:  true,
+		},
+		{
+			name:      "version>= does not match lesser",
+			tags:      []string{"issue:Bug@version>=go1.26rc1"},
+			arch:      "amd64",
+			toolchain: "go1.24.3",
+			expected:  false,
+		},
+		{
+			name:      "arch and exact version both match",
+			tags:      []string{"issue:Bug@arch=arm64,version=go1.26rc1"},
+			arch:      "arm64",
+			toolchain: "go1.26rc1",
+			expected:  true,
+		},
+		{
+			name:      "arch matches but exact version does not",
+			tags:      []string{"issue:Bug@arch=arm64,version=go1.26rc1"},
+			arch:      "arm64",
+			toolchain: "go1.24.3",
+			expected:  false,
+		},
+		{
+			name:      "exact version matches but arch does not",
+			tags:      []string{"issue:Bug@arch=arm64,version=go1.26rc1"},
+			arch:      "amd64",
+			toolchain: "go1.26rc1",
+			expected:  false,
+		},
+		{
+			name:      "neither matches",
+			tags:      []string{"issue:Bug@arch=arm64,version=go1.26rc1"},
+			arch:      "amd64",
+			toolchain: "go1.24.3",
+			expected:  false,
+		},
+		{
+			name:      "multiple issue tags, one matches",
+			tags:      []string{"issue:Bug1@arch=amd64", "issue:Bug2@arch=arm64"},
+			arch:      "arm64",
+			toolchain: "go1.24.3",
+			expected:  true,
+		},
+		{
+			name:      "reversed order: version,arch",
+			tags:      []string{"issue:Bug@version=go1.26rc1,arch=arm64"},
+			arch:      "arm64",
+			toolchain: "go1.26rc1",
+			expected:  true,
+		},
+		{
+			name:      "arch with version>=",
+			tags:      []string{"issue:Bug@arch=arm64,version>=go1.25.0"},
+			arch:      "arm64",
+			toolchain: "go1.26rc1",
+			expected:  true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &mockProbe{tags: tc.tags}
+			require.Equal(t, tc.expected, ShouldSkipForConfig(p, tc.arch, tc.toolchain))
+		})
+	}
 }

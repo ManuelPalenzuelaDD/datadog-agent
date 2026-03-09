@@ -14,6 +14,7 @@ import (
 	"path"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -122,10 +123,35 @@ func runTest(t *testing.T, cfg testprogs.Config, prog string) {
 	irWithDefaultLimits, err := irgen.GenerateIR(1, obj, probesCfgs)
 	require.NoError(t, err)
 	// Use tags to communicate expected issues.
+	// Only verify issues where the tag contains a valid IssueKind.
+	// Tags with descriptive names (not valid IssueKind values) are used
+	// for skipping in integration tests but ignored here.
+	validIssueKinds := map[string]bool{
+		"InvalidProbeDefinition": true,
+		"TargetNotFoundInBinary": true,
+		"UnsupportedFeature":     true,
+		"MalformedExecutable":    true,
+		"InvalidDWARF":           true,
+		"DisassemblyFailed":      true,
+	}
 	expectedIssues := make(map[string]string)
-	for _, cfg := range probesCfgs {
-		if issue, ok := testprogs.GetIssueTag(cfg); ok {
-			expectedIssues[cfg.GetID()] = issue
+	for _, probeCfg := range probesCfgs {
+		issueTag, ok := testprogs.GetIssueTag(probeCfg)
+		if !ok {
+			continue
+		}
+		// Extract the issue kind (before @) and check conditions
+		issueKind := issueTag
+		if atIdx := strings.Index(issueTag, "@"); atIdx != -1 {
+			issueKind = issueTag[:atIdx]
+			// Check if conditions match current config
+			if !testprogs.ShouldSkipForConfig(probeCfg, cfg.GOARCH, cfg.GOTOOLCHAIN) {
+				continue
+			}
+		}
+		// Only add if it's a valid IssueKind
+		if validIssueKinds[issueKind] {
+			expectedIssues[probeCfg.GetID()] = issueKind
 		}
 	}
 	computeGotIssues := func(p *ir.Program) map[string]string {

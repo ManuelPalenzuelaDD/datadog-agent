@@ -26,6 +26,9 @@ func TestMissingProbeIssue(t *testing.T) {
 	bin := testprogs.MustGetBinary(t, testProg, cfg)
 	probes := testprogs.MustGetProbeDefinitions(t, testProg)
 	probes = slices.DeleteFunc(probes, testprogs.HasIssueTag)
+	probes = slices.DeleteFunc(probes, func(p ir.ProbeDefinition) bool {
+		return testprogs.ShouldSkipForConfig(p, cfg.GOARCH, cfg.GOTOOLCHAIN)
+	})
 
 	obj, err := object.OpenElfFileWithDwarf(bin)
 	require.NoError(t, err)

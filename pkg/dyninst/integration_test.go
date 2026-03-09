@@ -339,20 +339,51 @@ func runIntegrationTestSuite(
 	for _, cfg := range cfgs {
 		probes := testprogs.MustGetProbeDefinitions(t, service)
 		probes = slices.DeleteFunc(probes, testprogs.HasIssueTag)
-		// Some probes have different output in different versions, due to
-		// compiler changes. We rename the probes to organize output into different files.
-		resultNames := make(map[string]string)
-		otherVersionNames := make(map[string]struct{})
+
+		// Collect variant names for probes that will be skipped due to conditional issue tags.
+		// This ensures their expected output files don't trigger "unexpected probes" errors.
+		otherVariantNames := make(map[string]struct{})
 		for _, p := range probes {
+			if !testprogs.ShouldSkipForConfig(p, cfg.GOARCH, cfg.GOTOOLCHAIN) {
+				continue
+			}
+			// Add the base probe ID
+			otherVariantNames[p.GetID()] = struct{}{}
+			// Add any arch_diff variants
+			_, archVariants := resolveArchDiff(p.GetID(), cfg.GOARCH, cfg.GOTOOLCHAIN, p.GetTags())
+			for _, other := range archVariants {
+				otherVariantNames[other] = struct{}{}
+			}
+		}
+
+		// Filter probes with conditional issue tags for this specific config
+		probes = slices.DeleteFunc(probes, func(p ir.ProbeDefinition) bool {
+			return testprogs.ShouldSkipForConfig(p, cfg.GOARCH, cfg.GOTOOLCHAIN)
+		})
+		// Some probes have different output in different versions or architectures,
+		// due to compiler changes. We rename the probes to organize output into different files.
+		// Tags supported:
+		//   - version_diff:VERSION - output differs by toolchain version
+		//   - arch_diff:ARCH - output differs by architecture
+		//   - arch_diff:ARCH,VERSION - output differs by specific arch+toolchain combination
+		resultNames := make(map[string]string)
+		for _, p := range probes {
+			// First, try to resolve using arch_diff tags (most specific)
+			archName, archVariants := resolveArchDiff(p.GetID(), cfg.GOARCH, cfg.GOTOOLCHAIN, p.GetTags())
+			for _, other := range archVariants {
+				otherVariantNames[other] = struct{}{}
+			}
+			if archName != "" {
+				resultNames[p.GetID()] = archName
+				continue
+			}
+
+			// Fall back to version_diff logic
 			var versions []string
 			for _, tag := range p.GetTags() {
 				if strings.HasPrefix(tag, "version_diff:") {
 					versionDiff := strings.TrimPrefix(tag, "version_diff:")
 					versions = append(versions, versionDiff)
-					if cfg.GOTOOLCHAIN >= versionDiff {
-						resultNames[p.GetID()] = p.GetID() + "_geq_" + versionDiff
-						break
-					}
 				}
 			}
 			if versions == nil {
@@ -376,7 +407,7 @@ func runIntegrationTestSuite(
 					resultNames[p.GetID()] = resultName
 					found = true
 				} else {
-					otherVersionNames[resultName] = struct{}{}
+					otherVariantNames[resultName] = struct{}{}
 				}
 			}
 		}
@@ -421,7 +452,7 @@ func runIntegrationTestSuite(
 								if _, ok := got[id]; ok {
 									return true
 								}
-								if _, ok := otherVersionNames[id]; ok {
+								if _, ok := otherVariantNames[id]; ok {
 									return true
 								}
 								return false
@@ -449,6 +480,94 @@ func runIntegrationTestSuite(
 			}
 		})
 	}
+}
+
+// resolveArchDiff checks arch_diff tags and returns the result name if a matching
+// tag is found, along with other variant names for validation.
+// arch_diff tags can be:
+//   - arch_diff:ARCH - matches when running on that architecture
+//   - arch_diff:ARCH,VERSION - matches when running on that arch AND toolchain >= version
+//
+// Returns empty string for resultName if no arch_diff tags exist or none match,
+// allowing the caller to fall back to version_diff logic.
+func resolveArchDiff(probeID, arch, toolchain string, tags []string) (resultName string, otherVariants []string) {
+	type archDiffTag struct {
+		arch        string
+		version     string
+		specificity int // 1 = arch only, 2 = arch+version
+	}
+
+	var parsed []archDiffTag
+	for _, tag := range tags {
+		if !strings.HasPrefix(tag, "arch_diff:") {
+			continue
+		}
+		value := strings.TrimPrefix(tag, "arch_diff:")
+		parts := strings.SplitN(value, ",", 2)
+		tagArch := parts[0]
+		var tagVersion string
+		specificity := 1
+		if len(parts) == 2 {
+			tagVersion = parts[1]
+			specificity = 2
+		}
+		parsed = append(parsed, archDiffTag{
+			arch:        tagArch,
+			version:     tagVersion,
+			specificity: specificity,
+		})
+	}
+
+	if len(parsed) == 0 {
+		return "", nil
+	}
+
+	// Find the best matching tag (highest specificity that matches)
+	var bestMatch *archDiffTag
+	for i := range parsed {
+		tag := &parsed[i]
+		if tag.arch != arch {
+			continue
+		}
+		if tag.version != "" && toolchain < tag.version {
+			continue
+		}
+		if bestMatch == nil || tag.specificity > bestMatch.specificity {
+			bestMatch = tag
+		}
+	}
+
+	// Build filename suffix from a tag
+	buildName := func(tag *archDiffTag) string {
+		if tag.version != "" {
+			return probeID + "_arch_" + tag.arch + "_geq_" + tag.version
+		}
+		return probeID + "_arch_" + tag.arch
+	}
+
+	// If no match found, return empty to allow fallback to version_diff
+	if bestMatch == nil {
+		// Still collect variant names for validation
+		for i := range parsed {
+			otherVariants = append(otherVariants, buildName(&parsed[i]))
+		}
+		return "", otherVariants
+	}
+
+	resultName = buildName(bestMatch)
+
+	// Collect all other variant names for validation
+	for i := range parsed {
+		tag := &parsed[i]
+		name := buildName(tag)
+		if name != resultName {
+			otherVariants = append(otherVariants, name)
+		}
+	}
+	// Also include base name as a variant since we matched an arch_diff tag
+	otherVariants = append(otherVariants, probeID)
+
+	return resultName, otherVariants
 }
 
 // validateAndSaveOutputs ensures that the outputs for the same probe are consistent
