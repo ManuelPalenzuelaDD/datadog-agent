@@ -168,23 +168,12 @@ rust_binary(
 # Tests
 # ============================================================================
 
-# Test data files
-filegroup(
-    name = "testdata",
-    srcs = glob(["testdata/**/*"]),
-)
-
-filegroup(
-    name = "mock_system_probe",
-    srcs = ["testdata/fallback/mock-system-probe.sh"],
-)
-
 # Unit tests embedded in source files
 rust_test(
     name = "dd_discovery_test",
     crate = ":dd_discovery",
     # Make test data available to tests
-    data = [":testdata"],
+    data = ["//pkg/discovery/module/rust/testdata:files"],
     edition = "2024",
     deps = [
         # Dev dependencies from Cargo.toml
@@ -201,7 +190,7 @@ rust_test(
     name = "fallback_integration_test",
     srcs = ["tests/fallback_integration_test.rs"],
     data = [
-        ":mock_system_probe",
+        "//pkg/discovery/module/rust/testdata:mock_system_probe",
         ":sd-agent",
     ],
     edition = "2024",
@@ -209,7 +198,7 @@ rust_test(
     # This mimics Cargo's CARGO_BIN_EXE_* behavior
     rustc_env = {
         "CARGO_BIN_EXE_sd-agent": "$(rootpath :sd-agent)",
-        "MOCK_SYSTEM_PROBE": "$(rootpath :mock_system_probe)",
+        "MOCK_SYSTEM_PROBE": "$(rootpath //pkg/discovery/module/rust/testdata:mock_system_probe)",
     },
     deps = [
         "@crates//:nix",
