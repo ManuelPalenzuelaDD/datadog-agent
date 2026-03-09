@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "datadog_agent",
+  "project_id": "ad46e2b1-9eab-47a8-bfe1-4f54ed119816"
+}
