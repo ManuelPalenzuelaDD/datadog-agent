@@ -5,7 +5,7 @@
 
 // CGO-backed getServices implementation using the Rust libdd_discovery shared library.
 
-//go:build dd_discovery_cgo
+//go:build dd_discovery_cgo && cgo
 
 package module
 
@@ -21,7 +21,6 @@ import (
 
 	"github.com/DataDog/datadog-agent/pkg/discovery/core"
 	"github.com/DataDog/datadog-agent/pkg/discovery/model"
-	"github.com/DataDog/datadog-agent/pkg/discovery/servicetype"
 	"github.com/DataDog/datadog-agent/pkg/discovery/tracermetadata"
 )
 
@@ -74,7 +73,7 @@ func nativeGetServices(newPids, hbPids []int32) *C.struct_dd_discovery_result {
 }
 
 // convertNativeResult translates a C dd_discovery_result into a ServicesResponse.
-// For new PIDs it applies comm filtering and service type detection.
+// For new PIDs it applies comm filtering.
 func (s *discovery) convertNativeResult(result *C.struct_dd_discovery_result, hbPids []int32) *model.ServicesResponse {
 	hbPidSet := make(map[int32]struct{}, len(hbPids))
 	for _, pid := range hbPids {
@@ -92,9 +91,6 @@ func (s *discovery) convertNativeResult(result *C.struct_dd_discovery_result, hb
 			_, isHeartbeat := hbPidSet[int32(svc.PID)]
 			if !isHeartbeat && s.shouldIgnoreComm(int32(svc.PID)) {
 				continue
-			}
-			if !isHeartbeat {
-				svc.Type = string(servicetype.Detect(svc.TCPPorts, svc.UDPPorts))
 			}
 			response.Services = append(response.Services, svc)
 		}
@@ -128,8 +124,7 @@ func cgoStr(s C.struct_dd_str) string {
 }
 
 // cgoConvertService converts a C dd_service to a model.Service, copying all
-// fields into Go memory. Type is not set; the caller applies servicetype.Detect
-// for new-PID services and leaves it empty for heartbeat services.
+// fields into Go memory.
 func cgoConvertService(svc *C.struct_dd_service) model.Service {
 	result := model.Service{
 		PID:                 int(svc.pid),
