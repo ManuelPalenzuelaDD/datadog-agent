@@ -1163,7 +1163,7 @@ workflow:
       compare_to: $COMPARE_TO_BRANCH
     when: on_success
 
-.on_windows_systemprobe_or_e2e_changes:
+.on_systemprobe_or_e2e_changes:
   - !reference [.on_e2e_main_release_or_rc]
   - changes:
       paths:

@@ -14,42 +14,11 @@ def setup_gcp_config(config: Config):
     if config.configParams.gcp is None:
         config.configParams.gcp = Config.Params.GCP(publicKeyPath=None)
 
-    # gcp public key path
+    # gcp - hardcoded to defaults temporarily
     if config.configParams.gcp.publicKeyPath is None:
         config.configParams.gcp.publicKeyPath = str(Path.home().joinpath(".ssh", "id_ed25519.pub").absolute())
-    default_public_key_path = config.configParams.gcp.publicKeyPath
-    while True:
-        config.configParams.gcp.publicKeyPath = default_public_key_path
-        public_key_path = ask(
-            f"🔑 Path to your GCP public ssh key: (default: [{config.configParams.gcp.publicKeyPath}])"
-        )
-        if public_key_path:
-            config.configParams.gcp.publicKeyPath = public_key_path
-
-        if os.path.isfile(config.configParams.gcp.publicKeyPath):
-            break
-        warn(f"{config.configParams.gcp.publicKeyPath} is not a valid ssh key")
-
-    default_account = ask(f"🔑 Default account to use, default [{config.configParams.gcp.account}]: ")
-    if default_account:
-        config.configParams.gcp.account = default_account
-
-    # openShift pull secret path
     if config.configParams.gcp.pullSecretPath is None:
         config.configParams.gcp.pullSecretPath = ""
-    default_pull_secret_path = config.configParams.gcp.pullSecretPath
-    while True:
-        config.configParams.gcp.pullSecretPath = default_pull_secret_path
-        pull_secret_path = ask("🔑 Path to your OpenShift pull secret file (optional, can be set later): ")
-        if not pull_secret_path:
-            # empty to skip
-            config.configParams.gcp.pullSecretPath = ""
-            break
-
-        config.configParams.gcp.pullSecretPath = pull_secret_path
-        if os.path.isfile(config.configParams.gcp.pullSecretPath):
-            break
-        warn(f"{config.configParams.gcp.pullSecretPath} is not a valid file")
 
 
 # Check if gke-gcloud-auth-plugin is installed and install it if not

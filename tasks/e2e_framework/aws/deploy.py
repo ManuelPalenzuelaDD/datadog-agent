@@ -1,4 +1,5 @@
 import os
+import platform
 import subprocess
 from typing import Any
 
@@ -7,6 +8,10 @@ from invoke.exceptions import Exit
 
 from tasks.e2e_framework import tool
 from tasks.e2e_framework.deploy import deploy as common_deploy
+
+
+def _aws_bin() -> str:
+    return "aws.exe" if platform.system() == "Windows" else "aws"
 
 default_public_path_key_name = "ddinfra:aws/defaultPublicKeyPath"
 default_private_path_key_name = "ddinfra:aws/defaultPrivateKeyPath"
@@ -90,7 +95,7 @@ def deploy(
         flags["ddagent:imagePullRegistry"] = "669783387624.dkr.ecr.us-east-1.amazonaws.com"
         flags["ddagent:imagePullUsername"] = "AWS"
         flags["ddagent:imagePullPassword"] = ctx.run(
-            "aws-vault exec sso-agent-qa-read-only -- aws ecr get-login-password --region us-east-1", hide=True
+            f"aws-vault exec sso-agent-qa-read-only -- {_aws_bin()} ecr get-login-password --region us-east-1", hide=True
         ).stdout.strip()
     elif (
         full_image_path is not None
@@ -101,7 +106,7 @@ def deploy(
         flags["ddagent:imagePullRegistry"] = "376334461865.dkr.ecr.us-east-1.amazonaws.com"
         flags["ddagent:imagePullUsername"] = "AWS"
         flags["ddagent:imagePullPassword"] = ctx.run(
-            "aws-vault exec sso-agent-sandbox-account-admin -- aws ecr get-login-password --region us-east-1",
+            f"aws-vault exec sso-agent-sandbox-account-admin -- {_aws_bin()} ecr get-login-password --region us-east-1",
             hide=True,
         ).stdout.strip()
     return common_deploy(

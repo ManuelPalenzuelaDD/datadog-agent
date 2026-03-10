@@ -35,7 +35,8 @@ def setup(
     from tasks.e2e_framework.setup.pulumi import install_pulumi, pulumi_version, setup_pulumi_config
 
     # Ensure aws cli is installed
-    if not shutil.which("aws"):
+    aws = "aws.exe" if is_windows() else "aws"
+    if not shutil.which(aws):
         error("AWS CLI not found, please install it: https://aws.amazon.com/cli/")
         raise Exit(code=1)
     # Ensure azure cli is installed
@@ -381,7 +382,8 @@ def debug_env(ctx, config_path: str | None = None):
         raise Exit(code=1) from e
 
     # check awscli version
-    out = ctx.run("aws --version", hide=True)
+    aws = "aws.exe" if is_windows() else "aws"
+    out = ctx.run(f"{aws} --version", hide=True)
     if not out.stdout.startswith("aws-cli/2"):
         error(f"Detected invalid awscli version: {out.stdout}")
         info(
@@ -433,7 +435,8 @@ def debug_env(ctx, config_path: str | None = None):
 
     # Check if aws creds are valid
     try:
-        out = ctx.run("aws sts get-caller-identity", hide=True)
+        aws = "aws.exe" if is_windows() else "aws"
+        out = ctx.run(f"{aws} sts get-caller-identity", hide=True)
     except UnexpectedExit as e:
         error(f"{e}")
         error("No AWS credentials found or they are expired, please configure and/or login")

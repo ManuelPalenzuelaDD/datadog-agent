@@ -1,9 +1,14 @@
 import json
+import platform
 from io import StringIO
 from typing import Any
 
 from invoke.context import Context
 from invoke.exceptions import Exit
+
+
+def _aws_bin() -> str:
+    return "aws.exe" if platform.system() == "Windows" else "aws"
 
 
 def get_default_os_family() -> str:
@@ -91,7 +96,7 @@ def get_aws_wrapper(
 def get_image_description(ctx: Context, ami_id: str) -> Any:
     buffer = StringIO()
     ctx.run(
-        f"aws-vault exec sso-agent-sandbox-account-admin -- aws ec2 describe-images --image-ids {ami_id}",
+        f"aws-vault exec sso-agent-sandbox-account-admin -- {_aws_bin()} ec2 describe-images --image-ids {ami_id}",
         out_stream=buffer,
     )
     result = json.loads(buffer.getvalue())

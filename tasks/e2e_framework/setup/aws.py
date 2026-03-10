@@ -20,59 +20,27 @@ def setup_aws_config(ctx: Context, config: Config):
     if config.configParams.aws is None:
         config.configParams.aws = Config.Params.Aws(keyPairName=None, publicKeyPath=None, account=None, teamTag=None)
 
-    # aws account
-    if config.configParams.aws.account is None:
-        config.configParams.aws.account = "agent-sandbox"
-    default_aws_account = config.configParams.aws.account
-    while True:
-        config.configParams.aws.account = default_aws_account
-        aws_account = ask(
-            f"Which aws account do you want to create instances on? Default [{config.configParams.aws.account}], available [agent-sandbox|sandbox|tse-playground]: "
-        )
-        if len(aws_account) > 0:
-            config.configParams.aws.account = aws_account
-        if config.configParams.aws.account in AVAILABLE_AWS_ACCOUNTS:
-            break
-        warn(f"{config.configParams.aws.account} is not a valid aws account")
+    # aws account - hardcoded to agent-sandbox temporarily
+    config.configParams.aws.account = "agent-sandbox"
 
     if config.configParams.aws.keyPairName and config.configParams.aws.publicKeyPath:
         info(f"Using key pair name: {config.configParams.aws.keyPairName}")
         info(f"Using public key path: {config.configParams.aws.publicKeyPath}")
         info(f"Using private key path: {config.configParams.aws.privateKeyPath}")
 
-    # ask user if they want to create a new key or import an existing key
-    if ask_yesno("Do you want to create a new key pair?"):
-        _aws_create_keypair(ctx, config, use_aws_vault=True, aws_account_name=config.configParams.aws.account)
-    elif ask_yesno("Do you want to import an existing key pair?"):
-        _aws_import_keypair(ctx, config, use_aws_vault=True, aws_account_name=config.configParams.aws.account)
+    # Temporarily skip key pair prompts
+    info("Skipping key pair creation/import (hardcoded)")
 
     if not config.configParams.aws.keyPairName or not config.configParams.aws.publicKeyPath:
         warn("No key pair configured, you will need to manually configure a key pair")
 
-    # check keypair name
+    # check keypair name - hardcoded to N temporarily
     if config.options is None:
         config.options = Config.Options(checkKeyPair=False)
-    default_check_key_pair = "Y" if config.options.checkKeyPair else "N"
-    checkKeyPair = ask(
-        f"Do you want to check if the keypair is loaded in ssh agent when creating manual environments or running e2e tests [Y/N]? Default [{default_check_key_pair}]: "
-    )
-    if len(checkKeyPair) > 0:
-        config.options.checkKeyPair = checkKeyPair.lower() == "y" or checkKeyPair.lower() == "yes"
+    config.options.checkKeyPair = False
 
-    # team tag
-    if config.configParams.aws.teamTag is None:
-        config.configParams.aws.teamTag = ""
-    while True:
-        msg = "🔖 What is your github team? This will tag all your resources by `team:<team>`. Use kebab-case format (example: agent-platform)"
-        if len(config.configParams.aws.teamTag) > 0:
-            msg += f". Default [{config.configParams.aws.teamTag}]"
-        msg += ": "
-        teamTag = ask(msg)
-        if len(teamTag) > 0:
-            config.configParams.aws.teamTag = teamTag
-        if len(config.configParams.aws.teamTag) > 0:
-            break
-        warn("Provide a non-empty team")
+    # team tag - hardcoded temporarily
+    config.configParams.aws.teamTag = "universal-service-monitoring"
 
     setup_aws_sso_config(config)
 
@@ -101,8 +69,8 @@ def setup_aws_sso_config(config: Config):
                 info(f"Profile {profile_name} already exists in {aws_conf_path}")
                 return
 
-    if not ask_yesno(f"Do you want to setup AWS SSO profile for {aws.account}?"):
-        return
+    # Temporarily skip SSO setup
+    return
 
     # https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html#cli-configure-sso-manual
     conf = f"""
@@ -352,7 +320,8 @@ def update_config_aws_keypair(
 
 
 def load_ec2_keypairs(ctx: Context) -> dict:
-    out = ctx.run("aws ec2 describe-key-pairs --output json", hide=True)
+    aws = "aws.exe" if is_windows() else "aws"
+    out = ctx.run(f"{aws} ec2 describe-key-pairs --output json", hide=True)
     if not out or out.exited != 0:
         warn("No AWS keypair found, please create one")
         return {}

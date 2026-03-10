@@ -159,7 +159,8 @@ def get_aws_instance_password_data(
 ) -> str:
     buffer = StringIO()
     with ctx.cd(_get_root_path()):
-        cmd = f'aws ec2 get-password-data --instance-id "{vm_id}" --priv-launch-key "{key_path}"'
+        aws = "aws.exe" if is_windows() else "aws"
+        cmd = f'{aws} ec2 get-password-data --instance-id "{vm_id}" --priv-launch-key "{key_path}"'
         if use_aws_vault:
             if aws_account is None:
                 raise Exit("AWS account is required when using aws-vault.")
@@ -172,7 +173,7 @@ def get_aws_instance_password_data(
 def get_image_description(ctx: Context, ami_id: str) -> Any:
     buffer = StringIO()
     ctx.run(
-        f"aws-vault exec sso-agent-sandbox-account-admin -- aws ec2 describe-images --image-ids {ami_id}",
+        f"aws-vault exec sso-agent-sandbox-account-admin -- {'aws.exe' if is_windows() else 'aws'} ec2 describe-images --image-ids {ami_id}",
         out_stream=buffer,
     )
     result = json.loads(buffer.getvalue())
