@@ -5,7 +5,10 @@
 filegroup(
     name = "files",
     srcs = glob(
-        ["**/*", "**/.*"],
+        [
+            "**/*",
+            "**/.*",
+        ],
         exclude = ["BUILD.bazel"],
     ),
     visibility = ["//pkg/discovery/module/rust:__pkg__"],

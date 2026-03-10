@@ -37,6 +37,7 @@ var (
 	// apmInjectorRegex matches the APM auto-injector launcher.preload.so library path
 	apmInjectorRegex = regexp.MustCompile(`/opt/datadog-packages/datadog-apm-inject/[^/]+/inject/launcher\.preload\.so`)
 )
+
 // socketInfo stores information related to each socket.
 type socketInfo struct {
 	port uint16
