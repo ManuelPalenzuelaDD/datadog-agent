@@ -19,27 +19,33 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	gorillamux "github.com/gorilla/mux"
 	"github.com/shirou/gopsutil/v4/process"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"golang.org/x/sys/unix"
 
 	"github.com/DataDog/datadog-agent/pkg/discovery/core"
 	"github.com/DataDog/datadog-agent/pkg/discovery/model"
 	"github.com/DataDog/datadog-agent/pkg/network/protocols/http/testutil"
 	usmtestutil "github.com/DataDog/datadog-agent/pkg/network/usm/testutil"
+	spclient "github.com/DataDog/datadog-agent/pkg/system-probe/api/client"
 	"github.com/DataDog/datadog-agent/pkg/system-probe/api/module"
 	"github.com/DataDog/datadog-agent/pkg/system-probe/config"
+	"github.com/DataDog/datadog-agent/pkg/util/kernel"
 )
 
 type testDiscoveryModule struct {
-	url string
+	url    string
+	client *http.Client
 }
 
-func setupDiscoveryModule(t *testing.T) *testDiscoveryModule {
+func setupGoDiscoveryModule(t *testing.T) *testDiscoveryModule {
 	t.Helper()
 	mux := gorillamux.NewRouter()
 
@@ -54,13 +60,71 @@ func setupDiscoveryModule(t *testing.T) *testDiscoveryModule {
 	t.Cleanup(srv.Close)
 
 	return &testDiscoveryModule{
-		url: srv.URL,
+		url:    srv.URL,
+		client: http.DefaultClient,
 	}
+}
+
+func setupRustDiscoveryModule(t *testing.T) *testDiscoveryModule {
+	t.Helper()
+
+	// Skip on CentOS 7 due to Rust binary not being statically linked
+	platform, err := kernel.Platform()
+	require.NoError(t, err)
+	platformVersion, err := kernel.PlatformVersion()
+	require.NoError(t, err)
+
+	if platform == "centos" && strings.HasPrefix(platformVersion, "7") {
+		t.Skip("Skipping Rust binary test on CentOS 7 due to glibc compatibility issues with non-static binary")
+	}
+
+	curDir, err := testutil.CurDir()
+	require.NoError(t, err)
+	binaryPath := filepath.Join(curDir, "rust", "embedded", "bin", "system-probe-lite")
+	require.FileExists(t, binaryPath, "system-probe-lite binary should be built")
+
+	socketDir := t.TempDir()
+	socketPath := filepath.Join(socketDir, "sysprobe.sock")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, binaryPath, "--", "/bin/true", "-c", "/dev/null")
+	cmd.Env = append(os.Environ(),
+		"DD_DISCOVERY_ENABLED=true",
+		"DD_DISCOVERY_USE_SYSTEM_PROBE_LITE=true",
+		"DD_SYSTEM_PROBE_CONFIG_SYSPROBE_SOCKET="+socketPath,
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() {
+		cancel()
+		_ = cmd.Wait()
+	})
+
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(socketPath)
+		return err == nil
+	}, 10*time.Second, 50*time.Millisecond, "system-probe-lite socket did not appear")
+
+	return &testDiscoveryModule{
+		url: "http://sysprobe",
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				DialContext: spclient.DialContextFunc(socketPath),
+			},
+		},
+	}
+}
+
+func setupDiscoveryModule(t *testing.T) *testDiscoveryModule {
+	t.Helper()
+	return setupGoDiscoveryModule(t)
 }
 
 // makeRequest wraps the request to the discovery module, setting the JSON body if provided,
 // and returning the response as the given type.
-func makeRequest[T any](t require.TestingT, url string, params *core.Params) *T {
+func makeRequest[T any](t require.TestingT, client *http.Client, url string, params *core.Params) *T {
 	var body *bytes.Buffer
 	if params != nil {
 		jsonData, err := params.ToJSON()
@@ -76,7 +140,7 @@ func makeRequest[T any](t require.TestingT, url string, params *core.Params) *T 
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	require.NoError(t, err, "failed to send request")
 	defer resp.Body.Close()
 
@@ -96,12 +160,31 @@ func getRunningPids(t require.TestingT) []int32 {
 }
 
 // getServices calls the /discovery/services endpoint using all running PIDs.
-func getServices(t require.TestingT, url string) *model.ServicesResponse {
-	location := url + "/" + string(config.DiscoveryModule) + pathServices
+func getServices(t require.TestingT, discovery *testDiscoveryModule) *model.ServicesResponse {
+	location := discovery.url + "/" + string(config.DiscoveryModule) + pathServices
 	params := &core.Params{
 		NewPids: getRunningPids(t),
 	}
-	return makeRequest[model.ServicesResponse](t, location, params)
+	return makeRequest[model.ServicesResponse](t, discovery.client, location, params)
+}
+
+type discoveryTestSuite struct {
+	suite.Suite
+	setupModule func(t *testing.T) *testDiscoveryModule
+	discovery   *testDiscoveryModule
+}
+
+func (s *discoveryTestSuite) SetupTest() {
+	s.discovery = s.setupModule(s.T())
+}
+
+func TestDiscovery(t *testing.T) {
+	t.Run("go", func(t *testing.T) {
+		suite.Run(t, &discoveryTestSuite{setupModule: setupGoDiscoveryModule})
+	})
+	t.Run("rust", func(t *testing.T) {
+		suite.Run(t, &discoveryTestSuite{setupModule: setupRustDiscoveryModule})
+	})
 }
 
 func newDiscovery() *discovery {

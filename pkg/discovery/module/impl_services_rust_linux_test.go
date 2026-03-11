@@ -58,7 +58,7 @@ func TestServicesBasic(t *testing.T) {
 	seen := make(map[int]model.Service)
 	// Eventually to give the processes time to start
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		resp := getServices(collect, discovery.url)
+		resp := getServices(collect, discovery)
 		for _, s := range resp.Services {
 			seen[s.PID] = s
 		}
