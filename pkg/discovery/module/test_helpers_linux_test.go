@@ -70,13 +70,11 @@ func makeRequest[T any](t require.TestingT, url string, params *core.Params) *T 
 
 	var req *http.Request
 	var err error
-	if body != nil {
-		req, err = http.NewRequest(http.MethodPost, url, body)
-		req.Header.Set("Content-Type", "application/json")
-	} else {
-		req, err = http.NewRequest(http.MethodPost, url, nil)
-	}
+	req, err = http.NewRequest(http.MethodPost, url, body)
 	require.NoError(t, err, "failed to create request")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err, "failed to send request")

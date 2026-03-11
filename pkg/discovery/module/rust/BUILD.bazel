@@ -51,7 +51,7 @@ rust_library(
     ],
 )
 
-# Shared library (cdylib) for FFI/cgo integration
+# Shared library (cdylib) for FFI integration
 rust_shared_library(
     name = "libdd_discovery",
     srcs = glob(
@@ -227,6 +227,6 @@ pkg_files(
 )
 
 pkg_install(
-    name = "install_cgo_libs",
+    name = "install_libs",
     srcs = [":libdd_discovery_files"],
 )

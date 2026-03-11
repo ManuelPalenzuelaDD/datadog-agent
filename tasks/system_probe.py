@@ -97,9 +97,9 @@ RUST_BINARIES = [
     "pkg/discovery/module/rust",
 ]
 
-# Rust packages that produce a CGO-linkable shared library (.so).
-# Kept separate from RUST_BINARIES since not every Rust binary exposes a CGO interface.
-RUST_CGO_LIBS = [
+# Rust packages that produce a shared library (.so).
+# Kept separate from RUST_BINARIES since not every Rust package exposes a library install target.
+RUST_LIBS = [
     "pkg/discovery/module/rust",
 ]
 
@@ -847,8 +847,8 @@ def build_sysprobe_binary(
                 env[k] = v
 
     if not is_windows and not is_macos and not static:
-        build_rust_cgo_libs(ctx, arch=arch_obj)
-        build_tags.append("dd_discovery_cgo")
+        build_rust_libs(ctx, arch=arch_obj)
+        build_tags.append("dd_discovery_rust")
 
     if os.path.exists(binary):
         os.remove(binary)
@@ -1652,7 +1652,7 @@ def build_rust_binaries(ctx: Context, arch: Arch, output_dir: Path | None = None
         ctx.run(f"bazelisk run {platform_flag} -- @//{source_path}:install --destdir={install_dest}")
 
 
-def build_rust_cgo_libs(ctx: Context, arch: Arch):
+def build_rust_libs(ctx: Context, arch: Arch):
     if is_windows or is_macos:
         return
 
@@ -1665,8 +1665,8 @@ def build_rust_cgo_libs(ctx: Context, arch: Arch):
     if arch.kmt_arch in platform_map:
         platform_flag = f"--platforms={platform_map[arch.kmt_arch]}"
 
-    for source_path in RUST_CGO_LIBS:
-        ctx.run(f"bazelisk run {platform_flag} -- @//{source_path}:install_cgo_libs --destdir={Path(source_path)}")
+    for source_path in RUST_LIBS:
+        ctx.run(f"bazelisk run {platform_flag} -- @//{source_path}:install_libs --destdir={Path(source_path)}")
 
 
 def build_cws_object_files(
