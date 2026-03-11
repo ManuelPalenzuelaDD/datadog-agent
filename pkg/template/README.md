@@ -9,7 +9,10 @@ The types like `FuncMap` or `HTML` are aliases of standard library types, so the
 The [text](./text) directory contains the code from `text/template`, the [html](./html) directory contains the code from `html/template`.
 
 ## Code Generation
-The code in this directory can be re-generated using `invoke -e pkg-template.generate` from the root of the repository.
+The code in this directory can be re-generated using:
+
+- Bazel: `bazel run //pkg/template:generate` (preferred)
+- Invoke: `inv pkg-template.generate`
 
 ## Go version
 The code is from the Go version pinned in the [.go-version](/.go-version) file.

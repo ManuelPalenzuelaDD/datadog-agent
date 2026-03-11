@@ -1,0 +1,20 @@
+load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "godebug.gopatch",
+    "imports.gopatch",
+    "no-method.patch",
+    "types.patch",
+])
+
+write_source_files(
+    name = "generate",
+    files = {
+        "text": "//bazel/rules/pkg_template:text",
+        "html": "//bazel/rules/pkg_template:html",
+        "internal/fmtsort": "//bazel/rules/pkg_template:internal_fmtsort",
+    },
+    check_that_out_file_exists = False,
+)

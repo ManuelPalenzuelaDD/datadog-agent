@@ -1,0 +1,31 @@
+load("//bazel/rules/pkg_template:defs.bzl", "apply_gopatch")
+
+package(default_visibility = ["//visibility:public"])
+
+_PATCHES = [
+    "//pkg/template:imports.gopatch",
+    "//pkg/template:godebug.gopatch",
+]
+
+_GOPATCH = "@com_github_uber_go_gopatch//:gopatch"
+
+apply_gopatch(
+    name = "text",
+    srcs = ["@pkg_template//:text"],
+    patches = _PATCHES,
+    gopatch = _GOPATCH,
+)
+
+apply_gopatch(
+    name = "html",
+    srcs = ["@pkg_template//:html"],
+    patches = _PATCHES,
+    gopatch = _GOPATCH,
+)
+
+apply_gopatch(
+    name = "internal_fmtsort",
+    srcs = ["@pkg_template//:internal_fmtsort"],
+    patches = _PATCHES,
+    gopatch = _GOPATCH,
+)
