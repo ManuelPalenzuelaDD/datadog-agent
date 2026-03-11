@@ -53,7 +53,8 @@ func setupGoDiscoveryModule(t *testing.T) *testDiscoveryModule {
 	require.NoError(t, err)
 	discovery := mod.(*discovery)
 
-	discovery.Register(module.NewRouter(string(config.DiscoveryModule), mux))
+	err = discovery.Register(module.NewRouter(string(config.DiscoveryModule), mux))
+	require.NoError(t, err)
 	t.Cleanup(discovery.Close)
 
 	srv := httptest.NewServer(mux)
@@ -176,15 +177,6 @@ type discoveryTestSuite struct {
 
 func (s *discoveryTestSuite) SetupTest() {
 	s.discovery = s.setupModule(s.T())
-}
-
-func TestDiscovery(t *testing.T) {
-	t.Run("go", func(t *testing.T) {
-		suite.Run(t, &discoveryTestSuite{setupModule: setupGoDiscoveryModule})
-	})
-	t.Run("rust", func(t *testing.T) {
-		suite.Run(t, &discoveryTestSuite{setupModule: setupRustDiscoveryModule})
-	})
 }
 
 func newDiscovery() *discovery {

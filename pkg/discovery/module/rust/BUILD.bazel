@@ -188,8 +188,8 @@ rust_test(
     name = "fallback_integration_test",
     srcs = ["tests/fallback_integration_test.rs"],
     data = [
-        "//pkg/discovery/module/rust/testdata:mock_system_probe",
         ":system-probe-lite",
+        "//pkg/discovery/module/rust/testdata:mock_system_probe",
     ],
     edition = "2024",
     # Set compile-time environment variable pointing to system-probe-lite binary
