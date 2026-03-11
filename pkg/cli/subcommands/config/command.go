@@ -36,6 +36,9 @@ type cliParams struct {
 	// includeDefault enables displaying all settings including defaults
 	includeDefault bool
 
+	// noAPICheck skips the live API key validation against the Datadog API
+	noAPICheck bool
+
 	// args are the positional command line args
 	args []string
 }
@@ -115,6 +118,32 @@ func MakeCommand(globalParamsGetter func() GlobalParams) *cobra.Command {
 		RunE:  oneShotRunE(otelAgentCfg),
 	}
 	cmd.AddCommand(otelCmd)
+
+	checkCmd := &cobra.Command{
+		Use:   "check",
+		Short: "Validate the Agent configuration file",
+		Long:  `Validates datadog.yaml: YAML syntax, API key format and liveness, site, schema, and file permissions.`,
+		RunE: func(_ *cobra.Command, args []string) error {
+			globalParams := globalParamsGetter()
+			cliParams.args = args
+			cliParams.GlobalParams = globalParams
+			return fxutil.OneShot(runConfigCheck,
+				fx.Supply(cliParams),
+				fx.Supply(core.BundleParams{
+					ConfigParams: config.NewAgentParams(
+						globalParams.ConfFilePath,
+						config.WithConfigName(globalParams.ConfigName),
+						config.WithExtraConfFiles(globalParams.ExtraConfFilePaths),
+						config.WithFleetPoliciesDirPath(globalParams.FleetPoliciesDirPath),
+					),
+					LogParams: log.ForOneShot(globalParams.LoggerName, "off", true),
+				}),
+				core.Bundle(),
+			)
+		},
+	}
+	checkCmd.Flags().BoolVar(&cliParams.noAPICheck, "no-api", false, "skip live API key validation against the Datadog API")
+	cmd.AddCommand(checkCmd)
 
 	return cmd
 }
